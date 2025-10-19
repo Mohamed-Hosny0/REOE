@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEADUX - Real Estate Offer Estimator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+        }
+
+        .silver-gradient {
+            background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 50%, #9ca3af 100%);
+        }
+
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .pulse-animation {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .5;
+            }
+        }
+
+        .chat-bubble {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+        }
+
+        .chat-window {
+            position: fixed;
+            bottom: 100px;
+            right: 24px;
+            width: 380px;
+            max-width: calc(100vw - 48px);
+            height: 500px;
+            z-index: 999;
+            display: none;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chat-messages {
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 3px;
+        }
+
+        .best-fit-badge {
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.8);
+            }
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Hero Section -->
+    <div class="gradient-bg text-white py-16 px-4">
+        <div class="max-w-6xl mx-auto text-center">
+            <div class="flex items-center justify-center mb-6">
+                <svg class="w-16 h-16 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                </svg>
+                <h1 class="text-4xl md:text-5xl font-bold">LEADUX</h1>
+            </div>
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">Real Estate Offer Estimator</h2>
+            <p class="text-xl md:text-2xl mb-8 text-blue-100">Discover your property's investor value — instantly.</p>
+
+            <!-- Property Input -->
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-lg shadow-2xl p-6">
+                    <label class="block text-gray-700 text-left font-semibold mb-2">Enter U.S. Property Address</label>
+                    <input
+                        type="text"
+                        id="propertyAddress"
+                        placeholder="e.g., 123 Main St, Los Angeles, CA 90001"
+                        class="w-full px-4 py-3 text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 mb-4"
+                    >
+                    <button
+                        id="analyzeBtn"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 transform hover:scale-105"
+                    >
+                        🔍 Analyze Property
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Override Section (Hidden by default) -->
+    <div id="manualOverride" class="hidden max-w-4xl mx-auto mt-8 px-4">
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <h3 class="text-xl font-bold text-yellow-800 mb-4">📝 Manual Property Data Entry</h3>
+            <p class="text-yellow-700 mb-4">Enter property details manually for accurate offer calculations.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-2">After Repair Value (ARV) $</label>
+                    <input type="number" id="manualARV" placeholder="300000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-2">Estimated Repair Cost $</label>
+                    <input type="number" id="manualRepair" placeholder="30000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-2">Existing Loan Balance $</label>
+                    <input type="number" id="manualLoan" placeholder="200000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-2">Property Type</label>
+                    <select id="manualType" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        <option>Single Family</option>
+                        <option>Multi Family</option>
+                        <option>Condo</option>
+                        <option>Townhouse</option>
+                    </select>
+                </div>
+            </div>
+            <button
+                id="calculateManualBtn"
+                class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300"
+            >
+                Calculate Offers
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="hidden max-w-4xl mx-auto mt-8 px-4">
+        <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p class="text-gray-600 text-lg">Analyzing property data...</p>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden max-w-7xl mx-auto mt-12 px-4 pb-12">
+        <!-- Property Info Card -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Property Analysis</h3>
+            <div id="propertyInfo" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- Offers Grid -->
+        <h3 class="text-3xl font-bold text-gray-800 mb-6 text-center">Investment Strategies</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="offersGrid"></div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col md:flex-row gap-4 justify-center">
+            <button
+                id="downloadPDFBtn"
+                class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg transition duration-300 transform hover:scale-105"
+            >
+                📄 Download PDF Report
+            </button>
+            <button
+                id="analyzeAnotherBtn"
+                class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg transition duration-300"
+            >
+                🔄 Analyze Another Property
+            </button>
+        </div>
+    </div>
+
+    <!-- Lead Capture Modal -->
+    <div id="leadModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+        <div class="bg-white rounded-lg shadow-2xl max-w-md w-full p-8 transform transition-all">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Get Your Detailed Report</h3>
+            <p class="text-gray-600 mb-6">Enter your information to access your complete property analysis.</p>
+            <form id="leadForm">
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold mb-2">Full Name *</label>
+                    <input type="text" id="leadName" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold mb-2">Email *</label>
+                    <input type="email" id="leadEmail" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold mb-2">Phone *</label>
+                    <input type="tel" id="leadPhone" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 font-semibold mb-2">Investor Type *</label>
+                    <select id="leadInvestorType" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        <option value="">Select...</option>
+                        <option value="wholesaler">Wholesaler</option>
+                        <option value="cash_buyer">Cash Buyer</option>
+                        <option value="creative_finance">Creative Finance</option>
+                        <option value="fix_and_flip">Fix & Flip</option>
+                        <option value="rental_investor">Rental Investor</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                    Access Report
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI Chat Bubble -->
+    <div class="chat-bubble">
+        <button id="chatBubbleBtn" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-16 h-16 shadow-2xl flex items-center justify-center transition duration-300 transform hover:scale-110">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- AI Chat Window -->
+    <div id="chatWindow" class="chat-window bg-white rounded-lg shadow-2xl flex flex-col">
+        <div class="gradient-bg text-white p-4 rounded-t-lg flex justify-between items-center">
+            <div class="flex items-center">
+                <div class="w-3 h-3 bg-green-400 rounded-full mr-2 pulse-animation"></div>
+                <h4 class="font-bold">LEADUX AI Assistant</h4>
+            </div>
+            <button id="closeChatBtn" class="text-white hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="chatMessages" class="chat-messages flex-1 p-4 space-y-3"></div>
+        <div class="p-4 border-t border-gray-200">
+            <div class="flex gap-2">
+                <input
+                    type="text"
+                    id="chatInput"
+                    placeholder="Ask me anything..."
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                >
+                <button id="sendChatBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-300 py-6 text-center">
+        <p class="text-sm">Powered by <span class="text-blue-400 font-bold">LEADUX</span> | Real Estate AI Tools</p>
+    </footer>
+
+    <script type="module">
+        const { createClient } = supabase;
+        const supabaseClient = createClient(
+            'https://uivrapkmvczpvkjrjvbs.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpdnJhcGttdmN6cHZranJqdmJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4NjU0MDMsImV4cCI6MjA3NjQ0MTQwM30._oycnYB1NCbkYLD9oKX7wDwwJx46WJBlqZIrotml3rI'
+        );
+
+        let currentPropertyData = null;
+        let currentOffers = null;
+
+        // Elements
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const propertyAddress = document.getElementById('propertyAddress');
+        const manualOverride = document.getElementById('manualOverride');
+        const calculateManualBtn = document.getElementById('calculateManualBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsSection = document.getElementById('resultsSection');
+        const leadModal = document.getElementById('leadModal');
+        const leadForm = document.getElementById('leadForm');
+        const chatBubbleBtn = document.getElementById('chatBubbleBtn');
+        const chatWindow = document.getElementById('chatWindow');
+        const closeChatBtn = document.getElementById('closeChatBtn');
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+        const chatMessages = document.getElementById('chatMessages');
+        const downloadPDFBtn = document.getElementById('downloadPDFBtn');
+        const analyzeAnotherBtn = document.getElementById('analyzeAnotherBtn');
+
+        // Analyze Property
+        analyzeBtn.addEventListener('click', async () => {
+            const address = propertyAddress.value.trim();
+            if (!address) {
+                alert('Please enter a property address');
+                return;
+            }
+
+            loadingIndicator.classList.remove('hidden');
+            resultsSection.classList.add('hidden');
+            manualOverride.classList.add('hidden');
+
+            // Simulate API call (in production, call Zillow/Redfin API)
+            setTimeout(() => {
+                loadingIndicator.classList.add('hidden');
+                manualOverride.classList.remove('hidden');
+
+                // Pre-fill with estimated values
+                document.getElementById('manualARV').value = Math.floor(Math.random() * (500000 - 200000) + 200000);
+                document.getElementById('manualRepair').value = Math.floor(Math.random() * (50000 - 10000) + 10000);
+                document.getElementById('manualLoan').value = Math.floor(Math.random() * (300000 - 100000) + 100000);
+            }, 2000);
+        });
+
+        // Calculate with Manual Data
+        calculateManualBtn.addEventListener('click', () => {
+            const arv = parseFloat(document.getElementById('manualARV').value);
+            const repairCost = parseFloat(document.getElementById('manualRepair').value);
+            const loanBalance = parseFloat(document.getElementById('manualLoan').value);
+            const propertyType = document.getElementById('manualType').value;
+
+            if (!arv || !repairCost || !loanBalance) {
+                alert('Please fill in all property details');
+                return;
+            }
+
+            currentPropertyData = {
+                address: propertyAddress.value.trim(),
+                arv,
+                repairCost,
+                loanBalance,
+                propertyType,
+                squareFeet: Math.floor(Math.random() * (3000 - 1000) + 1000),
+                beds: Math.floor(Math.random() * (5 - 2) + 2),
+                baths: Math.floor(Math.random() * (3 - 1) + 1)
+            };
+
+            currentOffers = calculateOffers(currentPropertyData);
+            displayResults(currentPropertyData, currentOffers);
+
+            // Show lead modal
+            leadModal.classList.remove('hidden');
+        });
+
+        // Calculate Offers
+        function calculateOffers(data) {
+            const { arv, repairCost, loanBalance } = data;
+            const assignmentFee = 10000;
+            const sellingCosts = arv * 0.08;
+            const investorProfit = arv * 0.10;
+            const cashToSeller = arv * 0.05;
+
+            const wholesaler = (arv * 0.7) - repairCost - assignmentFee;
+            const cashBuyer = (arv * 0.7) - repairCost;
+            const novation = arv - (repairCost + sellingCosts + investorProfit);
+            const creativeFinance = loanBalance + cashToSeller;
+
+            const offers = [
+                { type: 'Wholesaler', amount: wholesaler, icon: '🧱', color: 'orange', description: 'Quick assignment deal with wholesale profit built in' },
+                { type: 'Cash Buyer', amount: cashBuyer, icon: '💵', color: 'green', description: 'Direct cash purchase at 70% ARV minus repairs' },
+                { type: 'Novation', amount: novation, icon: '🧾', color: 'purple', description: 'Take over contract and sell at full retail value' },
+                { type: 'Creative Finance', amount: creativeFinance, icon: '🧠', color: 'blue', description: 'Subject-to financing with seller equity payment' }
+            ];
+
+            // Find best fit
+            const maxOffer = Math.max(...offers.map(o => o.amount));
+            offers.forEach(offer => {
+                offer.isBest = offer.amount === maxOffer;
+            });
+
+            return offers;
+        }
+
+        // Display Results
+        function displayResults(propertyData, offers) {
+            manualOverride.classList.add('hidden');
+            resultsSection.classList.remove('hidden');
+
+            // Property Info
+            const propertyInfo = document.getElementById('propertyInfo');
+            propertyInfo.innerHTML = `
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">ARV</p>
+                    <p class="text-xl font-bold text-gray-800">$${propertyData.arv.toLocaleString()}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">Repair Cost</p>
+                    <p class="text-xl font-bold text-gray-800">$${propertyData.repairCost.toLocaleString()}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">Property Type</p>
+                    <p class="text-xl font-bold text-gray-800">${propertyData.propertyType}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">Size</p>
+                    <p class="text-xl font-bold text-gray-800">${propertyData.beds} bed / ${propertyData.baths} bath</p>
+                </div>
+            `;
+
+            // Offers Grid
+            const offersGrid = document.getElementById('offersGrid');
+            offersGrid.innerHTML = offers.map(offer => `
+                <div class="bg-white rounded-lg shadow-lg p-6 card-hover relative ${offer.isBest ? 'ring-4 ring-green-500' : ''}">
+                    ${offer.isBest ? '<div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full best-fit-badge">BEST FIT</div>' : ''}
+                    <div class="text-4xl mb-3 text-center">${offer.icon}</div>
+                    <h4 class="text-xl font-bold text-gray-800 mb-2 text-center">${offer.type}</h4>
+                    <p class="text-3xl font-bold text-${offer.color}-600 mb-3 text-center">$${offer.amount.toLocaleString()}</p>
+                    <p class="text-sm text-gray-600 text-center">${offer.description}</p>
+                </div>
+            `).join('');
+
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Lead Form Submission
+        leadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const leadData = {
+                full_name: document.getElementById('leadName').value,
+                email: document.getElementById('leadEmail').value,
+                phone: document.getElementById('leadPhone').value,
+                investor_type: document.getElementById('leadInvestorType').value,
+                property_address: currentPropertyData.address,
+                property_data: {
+                    property: currentPropertyData,
+                    offers: currentOffers
+                }
+            };
+
+            try {
+                const { error } = await supabaseClient
+                    .from('leads')
+                    .insert([leadData]);
+
+                if (error) throw error;
+
+                leadModal.classList.add('hidden');
+                alert('Thank you! Your report is ready.');
+            } catch (error) {
+                console.error('Error saving lead:', error);
+                alert('Something went wrong. Please try again.');
+            }
+        });
+
+        // Download PDF
+        downloadPDFBtn.addEventListener('click', () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFontSize(20);
+            doc.text('LEADUX Property Analysis Report', 20, 20);
+
+            doc.setFontSize(12);
+            doc.text(`Property: ${currentPropertyData.address}`, 20, 35);
+            doc.text(`ARV: $${currentPropertyData.arv.toLocaleString()}`, 20, 45);
+            doc.text(`Repair Cost: $${currentPropertyData.repairCost.toLocaleString()}`, 20, 55);
+
+            doc.setFontSize(14);
+            doc.text('Investment Offers:', 20, 70);
+
+            let yPos = 80;
+            currentOffers.forEach(offer => {
+                doc.setFontSize(12);
+                doc.text(`${offer.type}: $${offer.amount.toLocaleString()} ${offer.isBest ? '(BEST FIT)' : ''}`, 25, yPos);
+                doc.setFontSize(10);
+                doc.text(offer.description, 25, yPos + 7);
+                yPos += 20;
+            });
+
+            doc.save('leadux-property-report.pdf');
+        });
+
+        // Analyze Another
+        analyzeAnotherBtn.addEventListener('click', () => {
+            propertyAddress.value = '';
+            resultsSection.classList.add('hidden');
+            document.getElementById('propertyAddress').scrollIntoView({ behavior: 'smooth' });
+        });
+
+        // Chat Functionality
+        chatBubbleBtn.addEventListener('click', () => {
+            chatWindow.style.display = 'flex';
+            if (chatMessages.children.length === 0) {
+                addBotMessage('Hi! I\'m your LEADUX AI Assistant. I can help explain different investment strategies and which one fits your property best. What would you like to know?');
+            }
+        });
+
+        closeChatBtn.addEventListener('click', () => {
+            chatWindow.style.display = 'none';
+        });
+
+        sendChatBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            addUserMessage(message);
+            chatInput.value = '';
+
+            setTimeout(() => {
+                const response = generateAIResponse(message);
+                addBotMessage(response);
+            }, 1000);
+        }
+
+        function addUserMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'flex justify-end';
+            div.innerHTML = `<div class="bg-blue-600 text-white rounded-lg px-4 py-2 max-w-[80%]">${text}</div>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addBotMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'flex justify-start';
+            div.innerHTML = `<div class="bg-gray-200 text-gray-800 rounded-lg px-4 py-2 max-w-[80%]">${text}</div>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function generateAIResponse(message) {
+            const lowerMessage = message.toLowerCase();
+
+            if (lowerMessage.includes('wholesaler') || lowerMessage.includes('wholesale')) {
+                return 'Wholesaling is great for quick deals! You find a motivated seller, get the property under contract, and assign that contract to a cash buyer for a fee (usually $10-15k). Best for beginners with limited capital.';
+            } else if (lowerMessage.includes('cash buyer') || lowerMessage.includes('cash')) {
+                return 'Cash buyers typically offer 70% of ARV minus repairs. This strategy works best when you have capital or private money. You close fast, fix the property, and either flip it or rent it out for passive income.';
+            } else if (lowerMessage.includes('novation')) {
+                return 'Novation is like wholesaling on steroids! You take over the seller\'s contract, control the deal, and market it at full retail price. You earn the spread between your contract price and the final sale price.';
+            } else if (lowerMessage.includes('creative') || lowerMessage.includes('subject to')) {
+                return 'Creative finance (Subject-To) means taking over the seller\'s existing mortgage payments. You give them some cash for their equity and take over payments. Great for deals with low equity and low-interest rates!';
+            } else if (lowerMessage.includes('best') || lowerMessage.includes('which one')) {
+                if (currentOffers) {
+                    const bestOffer = currentOffers.find(o => o.isBest);
+                    return `For this property, ${bestOffer.type} is the best fit at $${bestOffer.amount.toLocaleString()}. ${bestOffer.description} Would you like me to explain why this strategy works best here?`;
+                }
+                return 'First, analyze a property above and I can tell you which strategy fits best!';
+            } else if (lowerMessage.includes('call') || lowerMessage.includes('book') || lowerMessage.includes('consult')) {
+                return 'I\'d love to help you further! Ready to book a strategy call? Our team can walk you through exactly how to implement the best strategy for your market. Just fill out the lead form above!';
+            } else {
+                return 'Great question! Each investment strategy has unique benefits. Wholesaling needs no money, cash buying builds wealth fast, novation maximizes profit, and creative finance preserves capital. Which strategy interests you most?';
+            }
+        }
+    </script>
+</body>
+</html>
